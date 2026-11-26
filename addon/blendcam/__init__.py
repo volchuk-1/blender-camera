@@ -11,12 +11,12 @@ bl_info = {
 if "bpy" in locals():
     import importlib
 
-    for _m in (protocol, mapping, takes, server, qr, prefs, runtime, ops, ui):  # noqa: F821
+    for _m in (protocol, mapping, takes, server, qr, prefs, runtime, export, ops, ui):  # noqa: F821
         importlib.reload(_m)
 
 import bpy  # noqa: E402
 
-from . import mapping, ops, prefs, protocol, qr, runtime, server, takes, ui  # noqa: E402,F401
+from . import export, mapping, ops, prefs, protocol, qr, runtime, server, takes, ui  # noqa: E402,F401
 
 
 def register():
