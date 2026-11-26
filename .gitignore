@@ -1,0 +1,9 @@
+*.ipa
+build/
+__pycache__/
+*.pyc
+*.blend1
+blendcam_exports/
+ios/*.xcodeproj
+.superpowers/
+*.zip
