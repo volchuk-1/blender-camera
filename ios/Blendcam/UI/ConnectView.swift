@@ -32,7 +32,7 @@ struct ConnectView: View {
                     Divider()
                     Text("Або введіть вручну")
                         .font(.headline)
-                    TextField("Адреса, напр. 192.168.1.5", text: $address)
+                    TextField("Адреса, напр. 192.0.2.5", text: $address)
                         .keyboardType(.numbersAndPunctuation)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
@@ -78,7 +78,7 @@ struct ConnectView: View {
 
     private func manual() {
         guard let url = ConnectURL.manual(address: address, token: token) else {
-            error = "Перевірте адресу (напр. 192.168.1.5 або 192.168.1.5:52700) і токен"
+            error = "Перевірте адресу (напр. 192.0.2.5 або 192.0.2.5:52700) і токен"
             return
         }
         Haptics.success()

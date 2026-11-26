@@ -33,11 +33,15 @@ def write_json(scene, cam, take_name, info, path):
     fps = scene.render.fps / scene.render.fps_base
     start, end = int(info["frame_start"]), int(info["frame_end"])
     frames = []
+    prev_q = prev_e = None
     for f in range(start, end + 1):
         scene.frame_set(f)
         m = cam.matrix_world
         q = m.to_quaternion()
-        e = m.to_euler("XYZ")
+        if prev_q is not None and q.dot(prev_q) < 0:
+            q.negate()  # no sign flips between neighbouring frames
+        e = m.to_euler("XYZ", prev_e) if prev_e is not None else m.to_euler("XYZ")  # no +-2pi jumps
+        prev_q, prev_e = q, e
         frames.append({
             "frame": f,
             "location": [round(v, 6) for v in m.translation],

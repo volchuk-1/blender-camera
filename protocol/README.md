@@ -27,8 +27,10 @@ One JSON object per datagram (`fixtures/pose_basic.json`, `fixtures/pose_limited
 | `focal` | float           | focal length, mm |
 | `focus` | float, optional | focus distance, metres |
 
-The receiver drops a packet whose `seq` is not greater than the last accepted one, except when
-`seq < 10` after `>= 1000` (phone restarted).
+The receiver drops a packet whose `seq` is not greater than the last accepted one (late or reordered),
+except when its `t` is newer than the last accepted one (the AR session restarted and `seq` began
+again from 0). After such a restart Blender re-anchors, so the camera stays where it is.
+`focal` = 0 means "not set": Blender keeps the camera's lens.
 
 ## Control — TCP, both directions
 
@@ -44,13 +46,13 @@ Phone → Blender:
 | `record_stop`  | — | |
 | `play` / `pause` | — | timeline playback |
 | `frame`        | `n` | jump to frame `n` |
-| `settings`     | `scale`, `smooth`, `joy_speed`, `roll_deg` (0/90/180/270), `mirror_x` (bool) | any subset |
+| `settings`     | `scale`, `smooth`, `joy_speed`, `roll_deg` (0/90/180/270), `mirror_x` (bool), `stream` (bool) | any subset |
 
 Blender → phone:
 
 | type    | fields |
 |---------|--------|
-| `state` | `connected`, `recording`, `frame`, `frame_start`, `frame_end`, `fps`, `focal`, `camera`, `take` (+ optional `scale`, `smooth`, `joy_speed`, `stream`) |
+| `state` | `connected`, `recording`, `frame`, `frame_start`, `frame_end`, `fps`, `focal`, `camera`, `take` (next or current take name) + optional `last_take`, `scale`, `smooth`, `joy_speed`, `roll_deg`, `mirror_x`, `stream`, `live` (false = a take is shown, the phone does not drive the camera) |
 | `toast` | `text` (short message shown on the phone) |
 | `frame` | `len`, optional `ts` — followed by exactly `len` bytes of JPEG (live camera view) |
 

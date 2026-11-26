@@ -12,7 +12,7 @@ struct ControlView: View {
     @State private var joy = CGVector.zero
     @State private var lift: CGFloat = 0
     @State private var focal: Double = 35
-    @State private var focalLoaded = false
+    @State private var focalTouched = false
     @State private var frameValue: Double = 1
     @State private var editingFrame = false
     @State private var playing = false
@@ -29,6 +29,15 @@ struct ControlView: View {
             background
             VStack(spacing: 0) {
                 topBar
+                if link.state?.live == false && !recording {
+                    Text("Перегляд дубля · «Прив'язати» — знову керувати камерою")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.black)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 6)
+                        .background(Color.yellow, in: Capsule())
+                        .padding(.top, 6)
+                }
                 Spacer(minLength: 0)
                 middleControls
                 bottomBar
@@ -78,7 +87,8 @@ struct ControlView: View {
         .onDisappear(perform: disappear)
         .onChange(of: scenePhase) { _, phase in
             if phase == .active {
-                tracker.start()
+                // only restart AR when it was really stopped: a restart means a new ARKit world
+                if !tracker.running { tracker.start() }
                 link.resume()
             } else if phase == .background {
                 tracker.stop()
@@ -86,7 +96,9 @@ struct ControlView: View {
         }
         .onChange(of: joy) { _, v in tracker.joy = v }
         .onChange(of: lift) { _, v in tracker.lift = v }
-        .onChange(of: focal) { _, v in tracker.focal = Float(v) }
+        .onChange(of: focal) { _, v in
+            if focalTouched { tracker.focal = Float(v) }
+        }
         .onChange(of: link.state) { _, s in stateChanged(s) }
         .onChange(of: link.toastID) { _, _ in
             if let t = link.toast { showToast(t) }
@@ -225,7 +237,12 @@ struct ControlView: View {
             VStack(spacing: 2) {
                 Text("\(Int(focal)) мм")
                     .font(.caption)
-                Slider(value: $focal, in: 12...200, step: 1)
+                Slider(value: $focal, in: 12...200, step: 1, onEditingChanged: { editing in
+                    if editing {
+                        focalTouched = true
+                        tracker.focal = Float(focal)
+                    }
+                })
             }
             recordButton
         }
@@ -260,8 +277,8 @@ struct ControlView: View {
 
     private func appear() {
         tracker.link = link
-        tracker.focal = Float(focal)
-        tracker.start()
+        tracker.focal = focalTouched ? Float(focal) : 0
+        if !tracker.running { tracker.start() }
         link.resume()
         UIApplication.shared.isIdleTimerDisabled = true
     }
@@ -306,10 +323,8 @@ struct ControlView: View {
 
     private func stateChanged(_ s: BlenderState?) {
         guard let s else { return }
-        if !focalLoaded {
-            focal = min(200, max(12, s.focal))
-            tracker.focal = Float(focal)
-            focalLoaded = true
+        if !focalTouched {
+            focal = min(200, max(12, s.focal))  // follow Blender's lens until the user takes over
         }
         if !editingFrame {
             frameValue = Double(s.frame)

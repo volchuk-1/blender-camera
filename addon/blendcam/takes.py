@@ -330,11 +330,19 @@ def activate(cam_obj, take_name: str):
     if act is None:
         raise ValueError(take_name)
     cam_obj.rotation_mode = "QUATERNION"
-    if cam_obj.animation_data is None:
-        cam_obj.animation_data_create()
-    cam_obj.animation_data.action = act
+    _assign(cam_obj, act)
     lens = bpy.data.actions.get(take_name + "_lens")
     if lens is not None and cam_obj.type == "CAMERA":
-        if cam_obj.data.animation_data is None:
-            cam_obj.data.animation_data_create()
-        cam_obj.data.animation_data.action = lens
+        _assign(cam_obj.data, lens)
+
+
+def _assign(id_block, act):
+    """Assign an Action and make sure a slot is used (a take recorded on another camera has its own slot)."""
+    if id_block.animation_data is None:
+        id_block.animation_data_create()
+    ad = id_block.animation_data
+    ad.action = act
+    slots = getattr(act, "slots", None)
+    if getattr(ad, "action_slot", None) is None and slots is not None and len(slots):
+        slot = next((s for s in slots if s.target_id_type == id_block.id_type), slots[0])
+        ad.action_slot = slot

@@ -144,7 +144,7 @@ class RuntimeTest(unittest.TestCase):
 
 class QrTest(unittest.TestCase):
     def test_structure(self):
-        m = qr.encode("blendcam://192.168.1.5:52700?token=abcDEF12_-x")
+        m = qr.encode("blendcam://192.0.2.5:52700?token=abcDEF12_-x")
         n = len(m)
         self.assertEqual(n, 33)  # version 4
         self.assertTrue(all(len(r) == n for r in m))

@@ -28,7 +28,7 @@ struct ConnectURL: Equatable, Codable {
         self.token = token
     }
 
-    /// Manual entry: "192.168.1.5" or "192.168.1.5:52700" plus the token shown in Blender.
+    /// Manual entry: "192.0.2.5" or "192.0.2.5:52700" plus the token shown in Blender.
     static func manual(address: String, token: String) -> ConnectURL? {
         let a = address.trimmingCharacters(in: .whitespacesAndNewlines)
         let tok = token.trimmingCharacters(in: .whitespacesAndNewlines)

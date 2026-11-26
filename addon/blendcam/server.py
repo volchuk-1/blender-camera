@@ -212,6 +212,8 @@ class Server:
             self._last_packet = now
             self._times.append(now)
             if self._filter.accept(p):
+                if self._filter.restarted:
+                    self._controls.append({"type": "_restart"})
                 self._accepted += 1
                 self._latest = p
                 self._poses.append(p)

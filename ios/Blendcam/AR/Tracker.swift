@@ -15,7 +15,7 @@ final class Tracker: NSObject, ObservableObject, ARSessionDelegate {
     weak var link: Link?
     var joy = CGVector.zero
     var lift: CGFloat = 0
-    var focal: Float = 35
+    var focal: Float = 0  // 0 = "not sent": Blender keeps its lens until the user moves the slider
     private(set) var lastTimestamp: TimeInterval = 0
     private var seq = 0
     private var lastUI: TimeInterval = 0

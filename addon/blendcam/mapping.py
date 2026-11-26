@@ -28,13 +28,14 @@ def apply_calibration(m: Matrix, roll_deg: int, mirror_x: bool) -> Matrix:
 def yaw_of(m: Matrix) -> float:
     """Heading about world Z, radians; 0 = looking along +Y, positive = counter-clockwise."""
     r3 = m.to_3x3()
-    right = r3 @ Vector((1, 0, 0))
-    if math.hypot(right.x, right.y) > 0.3:
-        return math.atan2(right.y, right.x)
     fwd = r3 @ Vector((0, 0, -1))
-    if math.hypot(fwd.x, fwd.y) > 0.3:
-        return math.atan2(-fwd.x, fwd.y)
+    if math.hypot(fwd.x, fwd.y) > 0.2:
+        return math.atan2(-fwd.x, fwd.y)  # exact for any roll: roll turns about this very axis
+    # looking (almost) straight down or up: the top of the frame points along the heading (down)
+    # or against it (up)
     up = r3 @ Vector((0, 1, 0))
+    if fwd.z > 0:
+        up = -up
     return math.atan2(-up.x, up.y)
 
 

@@ -130,6 +130,7 @@ class Session:
         self.ips = []
         self._injected = []
         self._last_redraw = 0.0
+        self._last_error = None
 
     # ------------------------------------------------------------------ lifecycle
     def start(self, context, port=None, token=None, register_timer=True):
@@ -215,10 +216,13 @@ class Session:
         return mapping.apply_calibration(m, int(st.roll_deg), st.mirror_x)
 
     def _detach_animation(self, cam):
-        if cam.animation_data and cam.animation_data.action is not None:
-            cam.animation_data.action = None
-        if cam.type == "CAMERA" and cam.data.animation_data and cam.data.animation_data.action is not None:
-            cam.data.animation_data.action = None
+        for idb in (cam, cam.data if cam.type == "CAMERA" else None):
+            if idb is None or idb.animation_data is None or idb.animation_data.action is None:
+                continue
+            act = idb.animation_data.action
+            if not act.use_fake_user:
+                act.use_fake_user = True  # the user's own animation must survive save/reload
+            idb.animation_data.action = None
 
     # ------------------------------------------------------------------ main loop
     def tick(self):
@@ -228,6 +232,14 @@ class Session:
             self._tick()
         except ReferenceError:
             pass  # objects removed under us (file reload); next tick re-resolves
+        except Exception as e:  # noqa: BLE001 - never let one bad tick stop the live session
+            msg = "%s: %s" % (type(e).__name__, e)
+            if msg != self._last_error:
+                self._last_error = msg
+                import traceback
+
+                traceback.print_exc()
+                self.toast("Помилка Blendcam: %s" % msg, send=False)
         return TICK
 
     def _tick(self):
@@ -335,6 +347,10 @@ class Session:
             self.last_pose = None
             self.toast("Підключено: %s" % msg.get("device", "iPhone"), send=False)
             self.server.send({"type": "toast", "text": "Підключено до Blender"})
+        elif t == "_restart":
+            # new ARKit world on the phone: re-anchor at the next pose so the camera stays where it is
+            self.anchor = None
+            self.toast("Відстеження перезапущено — камера лишилась на місці")
         elif t == "_bye":
             self.toast("Телефон відключився", send=False)
         elif t == "anchor":
@@ -426,6 +442,7 @@ class Session:
         takes.bake(cam, frames, name, samples, t0=self.t0, fps=self.rec_fps,
                    frame_start=self.rec_frame_start, strength=st.smooth, gaps=gaps)
         self.last_take = name
+        st.live = False  # keep the new take on the camera (timeline keys, playback); anchor/record resumes live
         text = message or ("Дубль %s збережено (%d кадрів)" % (name, len(frames)))
         if gaps:
             text += " ⚠ втрата відстеження: " + ", ".join("%d–%d" % (a, b) for a, b in gaps[:3])

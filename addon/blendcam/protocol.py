@@ -86,16 +86,25 @@ class PoseFilter:
 
     def __init__(self):
         self.last_seq = None
+        self.last_t = None
+        self.restarted = False  # True right after accepting the first packet of a restarted AR session
 
     def reset(self):
         self.last_seq = None
+        self.last_t = None
+        self.restarted = False
 
     def accept(self, p: Pose) -> bool:
+        self.restarted = False
         if self.last_seq is None or p.seq > self.last_seq:
-            self.last_seq = p.seq
+            self.last_seq, self.last_t = p.seq, p.t
             return True
-        if p.seq < self.RESTART_LOW and self.last_seq >= self.RESTART_HIGH:
-            self.last_seq = p.seq
+        # AR session restarted on the phone: seq starts again from 0 but phone time (uptime) keeps rising.
+        # A reordered old packet has an older time and is dropped.
+        newer = self.last_t is not None and p.t > self.last_t
+        if newer or (p.seq < self.RESTART_LOW and self.last_seq >= self.RESTART_HIGH):
+            self.last_seq, self.last_t = p.seq, p.t
+            self.restarted = True
             return True
         return False
 
