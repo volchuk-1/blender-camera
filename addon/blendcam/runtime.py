@@ -288,7 +288,13 @@ class Session:
             self.last_state = now
             self.server.send(self.state_message())
         if self.streamer is not None:
-            self.streamer.enabled = bool(st.stream) and self.server.has_client()
+            want = bool(st.stream) and self.server.has_client()
+            if want and not self.streamer.enabled and self.streamer.error is None:
+                self.streamer.enabled = True
+            elif not want:
+                self.streamer.enabled = False
+                self.streamer.error = None  # switching it off and on again retries
+            self.streamer.tick(scene, cam)
         if now - self._last_redraw > 0.25:
             self._last_redraw = now
             _tag_redraw()

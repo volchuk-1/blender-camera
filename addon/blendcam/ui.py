@@ -58,6 +58,8 @@ class VIEW3D_PT_blendcam(bpy.types.Panel):
                 col.label(text="%s:%d" % (ip, s.server.port))
             col.label(text="Токен: %s" % s.server.token)
             box.prop(st, "show_qr")
+            if s.streamer is not None and s.streamer.error:
+                box.label(text=s.streamer.error, icon="ERROR")
             now = time.monotonic()
             for t, text in s.toasts[-2:]:
                 if now - t < 8:
