@@ -274,6 +274,7 @@ def bake(cam_obj, frames: List[FrameSample], take_name: str, raw: Optional[List[
         "gaps": [list(g) for g in gaps],
         "camera": cam_obj.name,
     }
+    act["blendcam_meta"] = json.dumps(meta, separators=(",", ":"))
     txt = data.texts.get(text_name(take_name))
     if raw is not None:
         meta["samples"] = _encode_samples(raw)
@@ -296,6 +297,12 @@ def load_raw(data, take_name):
 
 
 def take_info(data, take_name) -> Optional[dict]:
+    act = data.actions.get(take_name)
+    if act is not None and "blendcam_meta" in act:
+        try:
+            return json.loads(act["blendcam_meta"])
+        except ValueError:
+            pass
     meta = load_raw(data, take_name)
     if meta is None:
         return None

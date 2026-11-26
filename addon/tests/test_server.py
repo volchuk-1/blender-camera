@@ -21,7 +21,12 @@ def fake_phone(port, *extra, wait=True, timeout=30):
     cmd = [python_exe(), FAKE, "--host", "127.0.0.1", "--port", str(port), "--token", TOKEN] + list(extra)
     if wait:
         return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, encoding="utf-8")
-    return subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding="utf-8")
+    import tempfile
+
+    log = tempfile.TemporaryFile()
+    proc = subprocess.Popen(cmd, stdout=log, stderr=subprocess.STDOUT)
+    proc.log = log
+    return proc
 
 
 def wait_for(cond, timeout=5.0):
@@ -76,10 +81,13 @@ class ServerTest(unittest.TestCase):
             self.assertTrue(wait_for(lambda: self.s.client_name == "FakePhone"))
             self.s.send({"type": "state", "recording": False, "frame": 7})
             self.s.send({"type": "toast", "text": "Привіт"})
-            out, err = proc.communicate(timeout=20)
+            proc.wait(timeout=20)
         finally:
             if proc.poll() is None:
                 proc.kill()
+        proc.log.seek(0)
+        out = proc.log.read().decode("utf-8")
+        proc.log.close()
         lines = [json.loads(l[5:]) for l in out.splitlines() if l.startswith("RECV ")]
         self.assertIn({"type": "state", "recording": False, "frame": 7}, lines)
         self.assertIn({"type": "toast", "text": "Привіт"}, lines)

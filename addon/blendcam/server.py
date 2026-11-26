@@ -291,6 +291,7 @@ class Server:
                     c.device = str(msg.get("device") or "iPhone")[:64]
                     self.client_name = c.device
                     self.client_addr = c.addr[0]
+                self._filter.reset()  # a new phone session starts counting from 0
                 if old is not None:
                     _abort_close(old.sock)
                 with self._send_cv:
