@@ -27,10 +27,13 @@ final class Link: ObservableObject {
     private var counterTimer: Timer?
     private var decoding = false
     private var qTarget: ConnectURL?  // copy of `target` owned by `queue`
+    private let deviceName: String
 
     private static let savedKey = "blendcam.target"
 
     init() {
+        let name = UIDevice.current.name
+        deviceName = name.isEmpty ? "iPhone" : name
         if let data = UserDefaults.standard.data(forKey: Link.savedKey),
            let saved = try? JSONDecoder().decode(ConnectURL.self, from: data) {
             target = saved
@@ -136,8 +139,7 @@ final class Link: ObservableObject {
 
     private func onReady(_ gen: Int) {
         guard let target = currentTarget() else { return }
-        let device = UIDevice.current.name
-        sendOnQueue(.hello(token: target.token, device: device.isEmpty ? "iPhone" : device))
+        sendOnQueue(.hello(token: target.token, device: deviceName))
         DispatchQueue.main.async { self.connected = true }
         receive(gen)
     }
