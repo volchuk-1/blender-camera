@@ -1,6 +1,6 @@
 """GUI check (needs a window): live picture to the phone.
 
-fake_phone --recv-frames for 5 s: >= 75 frames (>= 15 fps), every frame a valid 640x360 JPEG,
+fake_phone --recv-frames for 5 s: >= 75 frames (>= 15 fps), every frame a valid 1280x720 JPEG (quality high),
 average latency from capture to arrival < 200 ms.
 
     blender --factory-startup --python addon/tests/gui_stream.py
@@ -76,7 +76,7 @@ def step():
             finish(False, {"error": "no FRAMES line", "out": out[-500:]})
             return None
         summ = json.loads(line[7:])
-        ok = (summ["frames"] >= 75 and summ["bad"] == 0 and summ["sizes"] == [[640, 360]]
+        ok = (summ["frames"] >= 75 and summ["bad"] == 0 and summ["sizes"] == [[1280, 720]]
               and summ["latency_ms_avg"] is not None and summ["latency_ms_avg"] < 200)
         finish(ok, summ)
         return None

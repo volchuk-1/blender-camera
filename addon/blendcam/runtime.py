@@ -323,6 +323,13 @@ class Session:
             self.last_state = now
             self.server.send(self.state_message())
         if self.streamer is not None:
+            from .stream import Streamer, stream_size
+
+            size = stream_size(st.stream_quality, scene.render.resolution_x, scene.render.resolution_y)
+            q = 3 if st.stream_quality == "high" else 5
+            if (self.streamer.width, self.streamer.height, self.streamer.jpeg_q) != (size[0], size[1], q):
+                self.streamer.stop()
+                self.streamer = Streamer(self.server, size[0], size[1], jpeg_q=q)
             want = bool(st.stream) and self.server.has_client()
             if want and not self.streamer.enabled and self.streamer.error is None:
                 self.streamer.enabled = True

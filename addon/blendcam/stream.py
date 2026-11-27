@@ -18,16 +18,32 @@ SOI = b"\xff\xd8"
 EOI = b"\xff\xd9"
 
 
+LONG_SIDE = {"normal": 640, "high": 1280}
+
+
+def stream_size(quality: str, res_x: int, res_y: int):
+    """Picture size for the phone: long side by quality, same aspect as the render, even numbers."""
+    long_side = LONG_SIDE.get(quality, LONG_SIDE["high"])
+    res_x, res_y = max(1, int(res_x)), max(1, int(res_y))
+    if res_x >= res_y:
+        w, h = long_side, long_side * res_y / res_x
+    else:
+        w, h = long_side * res_x / res_y, long_side
+    even = lambda v: max(2, int(round(v / 2.0)) * 2)  # noqa: E731
+    return even(w), even(h)
+
+
 def find_ffmpeg():
     return shutil.which("ffmpeg")
 
 
 class Streamer:
-    def __init__(self, server, width=640, height=360, fps=20):
+    def __init__(self, server, width=640, height=360, fps=20, jpeg_q=5):
         self.server = server
         self.width = int(width)
         self.height = int(height)
         self.fps = float(fps)
+        self.jpeg_q = int(jpeg_q)
         self.enabled = False
         self.error = None
         self.frames_in = 0
@@ -51,7 +67,7 @@ class Streamer:
         cmd = [exe, "-hide_banner", "-loglevel", "error",
                "-f", "rawvideo", "-pix_fmt", "rgba", "-s", "%dx%d" % (self.width, self.height),
                "-r", str(int(self.fps)), "-i", "-", "-threads", "1",
-               "-vf", "vflip", "-f", "image2pipe", "-vcodec", "mjpeg", "-q:v", "5",
+               "-vf", "vflip", "-f", "image2pipe", "-vcodec", "mjpeg", "-q:v", str(self.jpeg_q),
                "-flush_packets", "1", "-"]
         flags = 0
         if sys.platform.startswith("win"):
