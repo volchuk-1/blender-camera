@@ -21,6 +21,7 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.volchuk.blendcam
         INFOPLIST_KEY_CFBundleDisplayName: Blendcam
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
     info:
       path: Blendcam/Info.plist
       properties:

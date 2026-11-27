@@ -13,7 +13,7 @@ final class MessagesTests: XCTestCase {
     }
 
     func testControlFixturesRoundTrip() throws {
-        for name in ["hello", "record_start", "settings", "state", "toast", "frame_header"] {
+        for name in ["hello", "record_start", "settings", "settings_v3", "state", "toast", "frame_header"] {
             let raw = try fixture(name + ".json")
             let msg = try XCTUnwrap(decodeControl(raw), name)
             let back = encodeControl(msg)
@@ -39,6 +39,25 @@ final class MessagesTests: XCTestCase {
         XCTAssertEqual(decodeControl(try fixture("frame_header.json")), .frameHeader(len: 1234, ts: 12.5))
         XCTAssertNil(decodeControl(Data("{\"type\":\"nope\"}".utf8)))
         XCTAssertNil(decodeControl(Data("garbage".utf8)))
+    }
+
+    func testV3Fields() throws {
+        guard case .settings(let s)? = decodeControl(try fixture("settings_v3.json")) else {
+            return XCTFail("settings_v3")
+        }
+        XCTAssertEqual(s.preset, "crane")
+        XCTAssertEqual(s.rollLock, true)
+        XCTAssertEqual(s.orbit, "turntable")
+        XCTAssertEqual(s.orbitHold, 0.5)
+        XCTAssertEqual(s.streamQuality, "normal")
+        let line = Data(#"{"type":"state","connected":true,"recording":false,"frame":3,"frame_start":1,"frame_end":9,"fps":24,"focal":35,"camera":"Camera","take":"Take_02","orbit":"target","target":"Cube","preset":"tripod"}"#.utf8)
+        guard case .state(let st)? = decodeControl(line) else { return XCTFail("state v3") }
+        XCTAssertEqual(st.target, "Cube")
+        XCTAssertEqual(st.orbit, "target")
+        XCTAssertEqual(st.preset, "tripod")
+        let out = try XCTUnwrap(String(data: encodeControl(.settings(BlendSettings(orbit: "off"))), encoding: .utf8))
+        XCTAssertTrue(out.contains("\"orbit\":\"off\""))
+        XCTAssertFalse(out.contains("preset"))
     }
 
     func testCyrillicNotEscaped() throws {

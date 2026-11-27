@@ -13,9 +13,31 @@ struct SettingsView: View {
     @State private var roll: Int = 0
     @State private var mirror = false
     @State private var stream = true
+    @State private var preset = "steadicam"
+    @State private var rollLock = false
+    @State private var orbit = "off"
+    @State private var orbitHold: Double = 1.0
+    @State private var quality = "high"
     @State private var loaded = false
 
+    static let presetIDs = ["handheld", "steadicam", "crane", "tripod", "custom"]
+
+    static func presetTitle(_ id: String) -> String {
+        switch id {
+        case "handheld": return "Ручна"
+        case "steadicam": return "Стедікам"
+        case "crane": return "Кран / дрон"
+        case "tripod": return "Штатив"
+        default: return "Власний"
+        }
+    }
+
     private var scale: Double { PoseMath.logValue(scaleSlider, lo: 0.1, hi: 100) }
+
+    private var targetName: String {
+        let t = link.state?.target ?? ""
+        return t.isEmpty ? "ще не вибрано" : t
+    }
 
     var body: some View {
         NavigationStack {
@@ -28,17 +50,59 @@ struct SettingsView: View {
                         })
                     }
                     VStack(alignment: .leading) {
-                        Text(String(format: "Згладжування: %.2f (0 = сирий рух)", smooth))
-                        Slider(value: $smooth, in: 0...1, onEditingChanged: { editing in
-                            if !editing { send(BlendSettings(smooth: smooth)) }
-                        })
-                    }
-                    VStack(alignment: .leading) {
                         Text(String(format: "Швидкість джойстика: %.1f м/с", joySpeed))
                         Slider(value: $joySpeed, in: 0.2...10, onEditingChanged: { editing in
                             if !editing { send(BlendSettings(joySpeed: joySpeed)) }
                         })
                     }
+                }
+                Section("Стабілізація") {
+                    Picker("Пресет", selection: $preset) {
+                        ForEach(SettingsView.presetIDs, id: \.self) { id in
+                            Text(SettingsView.presetTitle(id)).tag(id)
+                        }
+                    }
+                    .onChange(of: preset) { _, new in
+                        if loaded { send(BlendSettings(preset: new)) }
+                    }
+                    if preset == "custom" {
+                        VStack(alignment: .leading) {
+                            Text(String(format: "Згладжування: %.2f (0 = сирий рух)", smooth))
+                            Slider(value: $smooth, in: 0...1, onEditingChanged: { editing in
+                                if !editing { send(BlendSettings(smooth: smooth)) }
+                            })
+                        }
+                    }
+                    Toggle("Без крену (горизонт завжди рівний)", isOn: $rollLock)
+                        .onChange(of: rollLock) { _, new in
+                            if loaded { send(BlendSettings(rollLock: new)) }
+                        }
+                }
+                Section("Обліт") {
+                    Picker("Режим", selection: $orbit) {
+                        Text("Вимк").tag("off")
+                        Text("Ціль").tag("target")
+                        Text("Стіл").tag("turntable")
+                    }
+                    .pickerStyle(.segmented)
+                    .onChange(of: orbit) { _, new in
+                        if loaded { send(BlendSettings(orbit: new)) }
+                    }
+                    if orbit == "target" {
+                        VStack(alignment: .leading) {
+                            Text("Тримати ціль: \(Int((orbitHold * 100).rounded())) %")
+                            Slider(value: $orbitHold, in: 0...1, onEditingChanged: { editing in
+                                if !editing { send(BlendSettings(orbitHold: orbitHold)) }
+                            })
+                        }
+                    }
+                    if orbit != "off" {
+                        Text("Ціль: \(targetName)")
+                            .foregroundStyle(.secondary)
+                    }
+                    Text("Ціль вибирається в Blender: поле «Ціль» у панелі Blendcam, або виділений об'єкт.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
                 }
                 Section("Калібрування (якщо картинка повернута чи дзеркальна)") {
                     Picker("Поворот кадру", selection: $roll) {
@@ -61,6 +125,14 @@ struct SettingsView: View {
                         .onChange(of: stream) { _, new in
                             if loaded { send(BlendSettings(stream: new)) }
                         }
+                    Picker("Якість картинки", selection: $quality) {
+                        Text("Звичайна").tag("normal")
+                        Text("Висока").tag("high")
+                    }
+                    .pickerStyle(.segmented)
+                    .onChange(of: quality) { _, new in
+                        if loaded { send(BlendSettings(streamQuality: new)) }
+                    }
                     Toggle("Налагодження (кути, координати)", isOn: $debug)
                 }
                 Section("Підключення") {
@@ -98,6 +170,11 @@ struct SettingsView: View {
             if let v = s.rollDeg { roll = v }
             if let v = s.mirrorX { mirror = v }
             if let v = s.stream { stream = v }
+            if let v = s.preset { preset = v }
+            if let v = s.rollLock { rollLock = v }
+            if let v = s.orbit { orbit = v }
+            if let v = s.orbitHold { orbitHold = v }
+            if let v = s.streamQuality { quality = v }
         }
         DispatchQueue.main.async { loaded = true }
     }

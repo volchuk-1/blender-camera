@@ -41,12 +41,20 @@ struct BlendSettings: Codable, Equatable {
     var rollDeg: Int?
     var mirrorX: Bool?
     var stream: Bool?
+    var preset: String?
+    var rollLock: Bool?
+    var orbit: String?
+    var orbitHold: Double?
+    var streamQuality: String?
 
     enum CodingKeys: String, CodingKey {
-        case scale, smooth, stream
+        case scale, smooth, stream, preset, orbit
         case joySpeed = "joy_speed"
         case rollDeg = "roll_deg"
         case mirrorX = "mirror_x"
+        case rollLock = "roll_lock"
+        case orbitHold = "orbit_hold"
+        case streamQuality = "stream_quality"
     }
 }
 
@@ -69,9 +77,18 @@ struct BlenderState: Codable, Equatable {
     var mirrorX: Bool?
     var stream: Bool?
     var live: Bool?
+    var preset: String?
+    var rollLock: Bool?
+    var orbit: String?
+    var orbitHold: Double?
+    var streamQuality: String?
+    var target: String?
 
     enum CodingKeys: String, CodingKey {
-        case connected, recording, frame, fps, focal, camera, take, scale, smooth, stream, live
+        case connected, recording, frame, fps, focal, camera, take, scale, smooth, stream, live, preset, orbit, target
+        case rollLock = "roll_lock"
+        case orbitHold = "orbit_hold"
+        case streamQuality = "stream_quality"
         case frameStart = "frame_start"
         case frameEnd = "frame_end"
         case lastTake = "last_take"

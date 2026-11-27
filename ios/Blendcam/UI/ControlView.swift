@@ -155,6 +155,43 @@ struct ControlView: View {
         return "Дубль \(num)"
     }
 
+    private var orbitMode: String { link.state?.orbit ?? "off" }
+
+    private var orbitLabel: String {
+        switch orbitMode {
+        case "target":
+            let t = link.state?.target ?? ""
+            return t.isEmpty ? "Обліт: ціль" : "Обліт: \(t)"
+        case "turntable":
+            return "Обліт: стіл"
+        default:
+            return "Обліт: вимк"
+        }
+    }
+
+    /// Off -> target -> turntable -> off.
+    private var orbitButton: some View {
+        Button {
+            let next: String
+            switch orbitMode {
+            case "off": next = "target"
+            case "target": next = "turntable"
+            default: next = "off"
+            }
+            link.send(.settings(BlendSettings(orbit: next)))
+            Haptics.heavy()
+        } label: {
+            Label(orbitLabel, systemImage: "rotate.3d")
+                .font(.subheadline.weight(.semibold))
+                .lineLimit(1)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 5)
+                .background(orbitMode == "off" ? Color.white.opacity(0.15) : Color.orange.opacity(0.85),
+                            in: Capsule())
+        }
+        .disabled(!link.connected)
+    }
+
     private var topBar: some View {
         HStack(spacing: 12) {
             Circle()
@@ -175,6 +212,7 @@ struct ControlView: View {
             }
             Text(takeText)
                 .font(.subheadline.weight(.semibold))
+            orbitButton
             Button {
                 showSettings = true
             } label: {
