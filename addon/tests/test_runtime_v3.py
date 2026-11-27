@@ -64,9 +64,9 @@ class SwitchTest(V3Base):
         cases = [("preset", "crane"), ("preset", "tripod"), ("preset", "handheld"), ("preset", "custom"),
                  ("roll_lock", True), ("roll_lock", False), ("orbit", "turntable"), ("orbit", "target"),
                  ("orbit", "off")]
-        self.feed(ar_rot(), 30)
+        self.feed(ar_rot(), 240)  # let the start-up glide and the filter settle
         for key, value in cases:
-            before = self.feed(ar_rot(), 10)
+            before = self.feed(ar_rot(), 120)
             setattr(self.st, key, value)
             after = self.feed(ar_rot(), 1)
             self.assertLess((after.translation - before.translation).length, 1e-3, (key, value))

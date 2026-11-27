@@ -137,7 +137,10 @@ class Session:
         self._mode_key = None
         self._target_name = None
         self._cursor_target = False
-        self._hold_ramp = 0.0     # phone time of the last re-base (eases the re-aim at the target)
+        self._last_raw = None     # last camera pose before roll removal and the live filter
+        self._last_sample_t = None
+        self._blend_t0 = 0.0      # phone time of the last re-base
+        self._blend_rot = None    # rotation the camera glides from after a re-base
 
     # ------------------------------------------------------------------ lifecycle
     def start(self, context, port=None, token=None, register_timer=True):
@@ -273,16 +276,15 @@ class Session:
             if not poses:
                 poses = [p]
             phone_world = self._phone_world(p)
+            preset = stabilize.preset_for(st.preset, st.smooth)
             if self.anchor is None:
-                self.anchor = mapping.Anchor.make(cam.matrix_world, phone_world)
-                self.offset = Vector((0.0, 0.0, 0.0))
-                self._reset_filters(cam.matrix_world, phone_world, target)
-            key = (st.preset, st.roll_lock, st.orbit, tname)
+                self.rebase(phone_world, target, p.t, base=cam.matrix_world, reset_smoother=True)
+            # only these change the raw path; presets and roll lock act after the take sample
+            key = (st.orbit, tname, preset.tripod)
             if self._mode_key is not None and key != self._mode_key:
-                self.rebase(cam, phone_world, target)
+                self.rebase(phone_world, target, p.t)
             self._mode_key = key
             self.last_phone_world = phone_world
-            preset = stabilize.preset_for(st.preset, st.smooth)
             if self.smoother is None or self.smoother.preset != preset:
                 old = self.smoother
                 self.smoother = stabilize.LiveSmoother(preset)
@@ -298,13 +300,17 @@ class Session:
                 self.offset.z += p.lift * speed
             self._detach_animation(cam)
             world = None
+            level = st.roll_lock or preset.roll_lock
             for q in poses:
                 pw = phone_world if q is p else self._phone_world(q)
                 raw = self._compose(pw, q, dt if q is p else 0.0, target, st, preset)
-                if self.recording and q.t >= self.t0 - 1e-6:
+                self._last_raw = raw
+                new = self._last_sample_t is None or q.t > self._last_sample_t
+                if self.recording and new and q.t >= self.t0 - 1e-6:
                     self.samples.append(takes.Sample(t=q.t, world=raw, focal=q.focal or cam.data.lens,
                                                      ok=(q.trk == "normal"), phone=pw.translation.copy()))
-                world = self.smoother.apply(raw, q.t)
+                    self._last_sample_t = q.t
+                world = self.smoother.apply(stabilize.remove_roll(raw) if level else raw, q.t)
             cam.matrix_world = world
             if p.focal > 0 and cam.type == "CAMERA":
                 cam.data.lens = p.focal
@@ -342,8 +348,10 @@ class Session:
             _tag_redraw()
 
     # ------------------------------------------------------------------ stage 3: presets and orbit
+    BLEND_SECONDS = 1.0
+
     def _compose(self, phone_world, q, dt, target, st, preset):
-        """Phone pose -> camera pose before the live filter (this is what a take stores)."""
+        """Phone pose -> raw camera pose (what a take stores; roll lock and the live filter come after)."""
         if st.orbit == "turntable" and target is not None:
             self.turntable.target = target
             world = self.turntable.apply(phone_world, q.joy, dt, st.joy_speed)
@@ -352,27 +360,38 @@ class Session:
             if preset.tripod and self.tripod_pos is not None:
                 world.translation = self.tripod_pos + self.offset
             if st.orbit == "target" and target is not None:
-                ramp = min(1.0, max(0.0, (q.t - self._hold_ramp) / 1.0))  # phone time: ease in over 1 s
-                world = orbit.aim(world, target, st.orbit_hold * ramp)
-        if st.roll_lock or preset.roll_lock:
-            world = stabilize.remove_roll(world)
+                world = orbit.aim(world, target, st.orbit_hold)
+        if self._blend_rot is not None:
+            # after a re-base the view direction glides over BLEND_SECONDS of phone time (raw and live alike)
+            k = (q.t - self._blend_t0) / self.BLEND_SECONDS
+            if k >= 1.0 or k < -0.5:
+                self._blend_rot = None
+            else:
+                k = max(0.0, k)
+                k = k * k * (3.0 - 2.0 * k)
+                target_q = world.to_quaternion()
+                if target_q.dot(self._blend_rot) < 0:
+                    target_q.negate()
+                pos = world.translation.copy()
+                world = self._blend_rot.slerp(target_q, k).to_matrix().to_4x4()
+                world.translation = pos
         return world
 
-    def _reset_filters(self, cam_world, phone_world, target):
-        self.tripod_pos = cam_world.translation.copy()
-        if target is not None:
-            self.turntable.start(cam_world, target, phone_world)
-        if self.smoother is not None:
-            self.smoother.reset(cam_world)
-
-    def rebase(self, cam, phone_world, target):
-        """A mode changed: re-anchor everything at the current camera so nothing jumps."""
-        st = settings(self.scene)
-        cam_world = cam.matrix_world.copy()
-        self.anchor = mapping.Anchor.make(cam_world, phone_world)
+    def rebase(self, phone_world, target, t, base=None, reset_smoother=False):
+        """Re-anchor at `base` (default: the last raw pose) so neither the live camera nor the take jumps."""
+        if base is None:
+            base = self._last_raw if self._last_raw is not None else self.camera().matrix_world
+        base = base.copy()
+        self.anchor = mapping.Anchor.make(base, phone_world)
         self.offset = Vector((0.0, 0.0, 0.0))
-        self._hold_ramp = self.last_pose.t if self.last_pose is not None else 0.0
-        self._reset_filters(cam_world, phone_world, target)
+        self.tripod_pos = base.translation.copy()
+        if target is not None:
+            self.turntable.start(base, target, phone_world)
+        self._blend_t0 = t
+        self._blend_rot = base.to_quaternion()
+        self._last_raw = base
+        if reset_smoother and self.smoother is not None:
+            self.smoother.reset(base)
 
     def target_point(self, scene, cam):
         """(location, name) of the orbit target, or (None, None) when the orbit is off."""
@@ -508,7 +527,8 @@ class Session:
             return False
         st.live = True
         phone_world = self._phone_world(self.last_pose)
-        self.rebase(cam, phone_world, self.target_point(scene, cam)[0])
+        self.rebase(phone_world, self.target_point(scene, cam)[0], self.last_pose.t,
+                    base=cam.matrix_world, reset_smoother=True)
         self.toast("Прив'язано")
         return True
 
