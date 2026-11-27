@@ -110,6 +110,27 @@ class BlendcamSceneSettings(bpy.types.PropertyGroup):
     live: BoolProperty(name="Керувати камерою з телефона", default=True)
     stream: BoolProperty(name="Показувати картинку на телефоні", default=True)
     show_qr: BoolProperty(name="Показувати QR у вікні 3D", default=True)
+    preset: EnumProperty(name="Стабілізація", default="steadicam", items=[
+        ("handheld", "Ручна", "Прибрати лише дрібне тремтіння"),
+        ("steadicam", "Стедікам", "Помітно плавний рух"),
+        ("crane", "Кран / дрон", "Дуже плавно, горизонт рівний"),
+        ("tripod", "Штатив", "Камера стоїть, працюють лише повороти (джойстик рухає штатив)"),
+        ("custom", "Власний", "Згладжування — повзунком нижче"),
+    ])
+    roll_lock: BoolProperty(name="Без крену", default=False, description="Горизонт камери завжди рівний")
+    orbit: EnumProperty(name="Обліт", default="off", items=[
+        ("off", "Вимк", "Звичайний режим"),
+        ("target", "Ціль", "Ходиш як завжди, камера дивиться на ціль"),
+        ("turntable", "Стіл", "Стоїш на місці: поворот телефона = політ по колу навколо цілі"),
+    ])
+    orbit_hold: FloatProperty(name="Тримати ціль", default=1.0, min=0.0, max=1.0, subtype="FACTOR",
+                              description="1 = ціль завжди в центрі, 0.5 = погляд м'яко тягнеться до цілі")
+    orbit_target: PointerProperty(name="Ціль", type=bpy.types.Object,
+                                  description="Порожньо = виділений об'єкт на момент увімкнення облету, або 3D-курсор")
+    stream_quality: EnumProperty(name="Картинка на телефоні", default="high", items=[
+        ("normal", "Звичайна", "640 пікселів завширшки"),
+        ("high", "Висока", "1280 пікселів завширшки"),
+    ])
 
 
 classes = (BlendcamPreferences, BlendcamSceneSettings)

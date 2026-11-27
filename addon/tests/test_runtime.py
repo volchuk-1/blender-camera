@@ -8,7 +8,7 @@ from mathutils import Vector
 import blendcam
 from blendcam import prefs, qr, runtime, takes
 
-from helpers import ar_m, fresh_scene, pose
+from helpers import ar_m, fresh_scene, pose, raw_motion
 
 
 class RuntimeTest(unittest.TestCase):
@@ -37,6 +37,7 @@ class RuntimeTest(unittest.TestCase):
 
     def test_pose_moves_camera_and_anchor_keeps_place(self):
         scene = fresh_scene()
+        raw_motion(scene)
         cam = scene.camera
         start = cam.matrix_world.translation.copy()
         s = self.start()
@@ -60,6 +61,7 @@ class RuntimeTest(unittest.TestCase):
 
     def test_scale_setting_from_phone(self):
         scene = fresh_scene()
+        raw_motion(scene)
         cam = scene.camera
         s = self.start()
         s.apply_settings({"type": "settings", "scale": 10.0, "smooth": 0.5, "roll_deg": 90,
@@ -67,7 +69,7 @@ class RuntimeTest(unittest.TestCase):
         self.assertEqual(scene.blendcam.scale, 10.0)
         self.assertEqual(scene.blendcam.roll_deg, "90")
         self.assertTrue(scene.blendcam.mirror_x)
-        s.apply_settings({"type": "settings", "mirror_x": False, "roll_deg": 0}, scene.blendcam)
+        s.apply_settings({"type": "settings", "mirror_x": False, "roll_deg": 0, "smooth": 0.0}, scene.blendcam)
         s._inject_pose(pose(1, ar_m(0, 1.4, 0)))
         s.tick()
         a = cam.matrix_world.translation.copy()
@@ -77,6 +79,7 @@ class RuntimeTest(unittest.TestCase):
 
     def test_joystick_moves_forward(self):
         scene = fresh_scene()
+        raw_motion(scene)
         cam = scene.camera
         s = self.start()
         s._inject_pose(pose(1, ar_m(0, 1.4, 0)))

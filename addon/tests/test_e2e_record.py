@@ -58,7 +58,7 @@ class EndToEndRecordTest(unittest.TestCase):
         avg = sum(radii) / len(radii)
         self.assertAlmostEqual(avg, 0.5 * 4.0, delta=0.1)
         self.assertLess(max(radii) - min(radii), 0.2)
-        self.assertIn("збережено", out)  # the phone got the toast
+        self.assertIn("збережено", out, "toasts: %r" % s.toasts)  # the phone got the toast
         info = takes.take_info(bpy.data, "Take_01")
         self.assertEqual(info["frame_start"], scene.frame_start)
         self.assertEqual(info["gaps"], [])

@@ -8,7 +8,7 @@ import time
 import bpy
 from mathutils import Matrix, Vector
 
-from . import mapping, protocol, takes
+from . import mapping, orbit, protocol, stabilize, takes
 from .server import Server, local_ipv4s
 
 TICK = 1.0 / 60.0
@@ -131,6 +131,13 @@ class Session:
         self._injected = []
         self._last_redraw = 0.0
         self._last_error = None
+        self.smoother = None
+        self.tripod_pos = None
+        self.turntable = orbit.Turntable()
+        self._mode_key = None
+        self._target_name = None
+        self._cursor_target = False
+        self._hold_ramp = 0.0     # phone time of the last re-base (eases the re-aim at the target)
 
     # ------------------------------------------------------------------ lifecycle
     def start(self, context, port=None, token=None, register_timer=True):
@@ -261,31 +268,47 @@ class Session:
             self.tracking = p.trk
         p = self.last_pose
         fresh = bool(poses) or (p is not None and self.server.last_packet_age() < LIVE_AGE)
+        target, tname = self.target_point(scene, cam)
         if p is not None and fresh and st.live:
+            if not poses:
+                poses = [p]
             phone_world = self._phone_world(p)
-            self.last_phone_world = phone_world
             if self.anchor is None:
                 self.anchor = mapping.Anchor.make(cam.matrix_world, phone_world)
                 self.offset = Vector((0.0, 0.0, 0.0))
+                self._reset_filters(cam.matrix_world, phone_world, target)
+            key = (st.preset, st.roll_lock, st.orbit, tname)
+            if self._mode_key is not None and key != self._mode_key:
+                self.rebase(cam, phone_world, target)
+            self._mode_key = key
+            self.last_phone_world = phone_world
+            preset = stabilize.preset_for(st.preset, st.smooth)
+            if self.smoother is None or self.smoother.preset != preset:
+                old = self.smoother
+                self.smoother = stabilize.LiveSmoother(preset)
+                self.smoother.reset(cam.matrix_world if old is None else None)
+                if old is not None:
+                    self.smoother._pos, self.smoother._quat, self.smoother._t = old._pos, old._quat, old._t
             jx, jy = p.joy
-            if jx or jy or p.lift:
+            turntable = st.orbit == "turntable" and target is not None
+            if (jx or jy or p.lift) and not turntable:
                 yaw = mapping.yaw_matrix(self.anchor.heading(phone_world))
                 speed = st.joy_speed * dt
                 self.offset += yaw @ Vector((jx, jy, 0.0)) * speed
                 self.offset.z += p.lift * speed
             self._detach_animation(cam)
-            world = self.anchor.apply(phone_world, st.scale, self.offset)
+            world = None
+            for q in poses:
+                pw = phone_world if q is p else self._phone_world(q)
+                raw = self._compose(pw, q, dt if q is p else 0.0, target, st, preset)
+                if self.recording and q.t >= self.t0 - 1e-6:
+                    self.samples.append(takes.Sample(t=q.t, world=raw, focal=q.focal or cam.data.lens,
+                                                     ok=(q.trk == "normal"), phone=pw.translation.copy()))
+                world = self.smoother.apply(raw, q.t)
             cam.matrix_world = world
             if p.focal > 0 and cam.type == "CAMERA":
                 cam.data.lens = p.focal
             if self.recording:
-                for q in poses:
-                    if q.t < self.t0 - 1e-6:
-                        continue
-                    pw = self._phone_world(q) if q is not p else phone_world
-                    w = self.anchor.apply(pw, st.scale, self.offset)
-                    self.samples.append(takes.Sample(t=q.t, world=w, focal=q.focal or cam.data.lens,
-                                                     ok=(q.trk == "normal"), phone=pw.translation.copy()))
                 frame = self.rec_frame_start + int(round((p.t - self.t0) * self.rec_fps))
                 if frame != scene.frame_current:
                     scene.frame_set(frame)
@@ -310,6 +333,67 @@ class Session:
         if now - self._last_redraw > 0.25:
             self._last_redraw = now
             _tag_redraw()
+
+    # ------------------------------------------------------------------ stage 3: presets and orbit
+    def _compose(self, phone_world, q, dt, target, st, preset):
+        """Phone pose -> camera pose before the live filter (this is what a take stores)."""
+        if st.orbit == "turntable" and target is not None:
+            self.turntable.target = target
+            world = self.turntable.apply(phone_world, q.joy, dt, st.joy_speed)
+        else:
+            world = self.anchor.apply(phone_world, st.scale, self.offset)
+            if preset.tripod and self.tripod_pos is not None:
+                world.translation = self.tripod_pos + self.offset
+            if st.orbit == "target" and target is not None:
+                ramp = min(1.0, max(0.0, (q.t - self._hold_ramp) / 1.0))  # phone time: ease in over 1 s
+                world = orbit.aim(world, target, st.orbit_hold * ramp)
+        if st.roll_lock or preset.roll_lock:
+            world = stabilize.remove_roll(world)
+        return world
+
+    def _reset_filters(self, cam_world, phone_world, target):
+        self.tripod_pos = cam_world.translation.copy()
+        if target is not None:
+            self.turntable.start(cam_world, target, phone_world)
+        if self.smoother is not None:
+            self.smoother.reset(cam_world)
+
+    def rebase(self, cam, phone_world, target):
+        """A mode changed: re-anchor everything at the current camera so nothing jumps."""
+        st = settings(self.scene)
+        cam_world = cam.matrix_world.copy()
+        self.anchor = mapping.Anchor.make(cam_world, phone_world)
+        self.offset = Vector((0.0, 0.0, 0.0))
+        self._hold_ramp = self.last_pose.t if self.last_pose is not None else 0.0
+        self._reset_filters(cam_world, phone_world, target)
+
+    def target_point(self, scene, cam):
+        """(location, name) of the orbit target, or (None, None) when the orbit is off."""
+        st = settings(scene)
+        if st.orbit == "off":
+            self._target_name = None
+            self._cursor_target = False
+            return None, None
+        obj = st.orbit_target
+        if obj is not None and obj.name in scene.objects and obj != cam:
+            self._target_name = obj.name
+            self._cursor_target = False
+            return obj.matrix_world.translation.copy(), obj.name
+        if self._target_name is not None and not self._cursor_target:
+            # the target object is gone
+            st.orbit = "off"
+            self._target_name = None
+            self.toast("Ціль зникла — обліт вимкнено")
+            return None, None
+        if not self._cursor_target:
+            active = bpy.context.view_layer.objects.active if bpy.context.view_layer else None
+            if active is not None and active != cam and active.name in scene.objects:
+                st.orbit_target = active
+                self._target_name = active.name
+                return active.matrix_world.translation.copy(), active.name
+            self._cursor_target = True
+            self._target_name = "3D-курсор"
+        return scene.cursor.location.copy(), "3D-курсор"
 
     def state_message(self):
         scene = self.scene
@@ -336,6 +420,12 @@ class Session:
             "mirror_x": st.mirror_x,
             "stream": st.stream,
             "live": st.live,
+            "preset": st.preset,
+            "roll_lock": st.roll_lock,
+            "orbit": st.orbit,
+            "orbit_hold": round(st.orbit_hold, 3),
+            "stream_quality": st.stream_quality,
+            "target": self._target_name or "",
         }
 
     # ------------------------------------------------------------------ controls
@@ -344,12 +434,14 @@ class Session:
         t = msg.get("type")
         if t == "hello":
             self.anchor = None
+            self._mode_key = None
             self.last_pose = None
             self.toast("Підключено: %s" % msg.get("device", "iPhone"), send=False)
             self.server.send({"type": "toast", "text": "Підключено до Blender"})
         elif t == "_restart":
             # new ARKit world on the phone: re-anchor at the next pose so the camera stays where it is
             self.anchor = None
+            self._mode_key = None
             self.toast("Відстеження перезапущено — камера лишилась на місці")
         elif t == "_bye":
             self.toast("Телефон відключився", send=False)
@@ -389,6 +481,15 @@ class Session:
             st.mirror_x = msg["mirror_x"]
         if isinstance(msg.get("stream"), bool):
             st.stream = msg["stream"]
+        num("orbit_hold", 0.0, 1.0)
+        if isinstance(msg.get("roll_lock"), bool):
+            st.roll_lock = msg["roll_lock"]
+        for key, allowed in (("preset", ("handheld", "steadicam", "crane", "tripod", "custom")),
+                             ("orbit", ("off", "target", "turntable")),
+                             ("stream_quality", ("normal", "high"))):
+            v = msg.get(key)
+            if isinstance(v, str) and v in allowed:
+                setattr(st, key, v)
         self.last_state = 0.0
 
     def do_anchor(self):
@@ -400,8 +501,7 @@ class Session:
             return False
         st.live = True
         phone_world = self._phone_world(self.last_pose)
-        self.anchor = mapping.Anchor.make(cam.matrix_world, phone_world)
-        self.offset = Vector((0.0, 0.0, 0.0))
+        self.rebase(cam, phone_world, self.target_point(scene, cam)[0])
         self.toast("Прив'язано")
         return True
 
@@ -435,12 +535,15 @@ class Session:
             self.toast("Дубль порожній — нічого не збережено")
             return None
         cam = self.camera()
-        frames, gaps = takes.process(samples, self.t0, self.rec_fps, self.rec_frame_start, st.smooth)
+        pr = stabilize.preset_for(st.preset, st.smooth)
+        roll = st.roll_lock or pr.roll_lock
+        frames, gaps = takes.process(samples, self.t0, self.rec_fps, self.rec_frame_start, pr.bake_sigma / 4.0, roll)
         if not frames:
             self.toast("Дубль порожній — нічого не збережено")
             return None
         takes.bake(cam, frames, name, samples, t0=self.t0, fps=self.rec_fps,
-                   frame_start=self.rec_frame_start, strength=st.smooth, gaps=gaps)
+                   frame_start=self.rec_frame_start, strength=pr.bake_sigma / 4.0, gaps=gaps,
+                   preset=st.preset, roll_lock=roll)
         self.last_take = name
         st.live = False  # keep the new take on the camera (timeline keys, playback); anchor/record resumes live
         text = message or ("Дубль %s збережено (%d кадрів)" % (name, len(frames)))

@@ -26,6 +26,12 @@ def fresh_scene(empty=False):
     return bpy.context.scene
 
 
+def raw_motion(scene):
+    """Live filter off (custom preset, smoothing 0): the camera follows the phone exactly."""
+    scene.blendcam.preset = "custom"
+    scene.blendcam.smooth = 0.0
+
+
 def pose(seq, m, t=None, trk="normal", joy=(0.0, 0.0), lift=0.0, focal=35.0):
     return protocol.Pose(seq=seq, t=seq / 60.0 if t is None else t, m=list(m), trk=trk,
                          joy=joy, lift=lift, focal=focal, focus=None)

@@ -4,7 +4,7 @@ import os
 import bpy
 from bpy.props import StringProperty
 
-from . import prefs, runtime, takes
+from . import prefs, runtime, stabilize, takes
 
 
 def _session():
@@ -83,13 +83,16 @@ class BLENDCAM_OT_rebake(bpy.types.Operator):
 
     def execute(self, context):
         try:
+            st = context.scene.blendcam
+            pr = stabilize.preset_for(st.preset, st.smooth)
             cam = _camera_for_take(context, self.take)
-            takes.rebake(cam, self.take, context.scene.blendcam.smooth)
+            takes.rebake(cam, self.take, pr.bake_sigma / 4.0, roll_lock=st.roll_lock or pr.roll_lock,
+                         preset=st.preset)
         except ValueError as e:
             self.report({"ERROR"}, str(e))
             return {"CANCELLED"}
         context.scene.blendcam.live = False
-        self.report({"INFO"}, "%s перепечено, згладжування %.2f" % (self.take, context.scene.blendcam.smooth))
+        self.report({"INFO"}, "%s перепечено: %s" % (self.take, st.preset))
         return {"FINISHED"}
 
 

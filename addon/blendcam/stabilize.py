@@ -32,6 +32,8 @@ D_CUTOFF = 1.0
 def preset_for(name: str, custom_smooth: float = 0.3) -> Preset:
     if name == "custom":
         s = max(0.0, min(1.0, float(custom_smooth)))
+        if s <= 0.0:
+            return Preset("custom", 1e9, 0.0, 0.0, False, False)  # 0 = raw handheld motion, no filter
         return Preset("custom", 3.0 / (1.0 + 10.0 * s), 0.3, 4.0 * s, False, False)
     return PRESETS.get(name, PRESETS["steadicam"])
 

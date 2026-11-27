@@ -69,9 +69,29 @@ class VIEW3D_PT_blendcam(bpy.types.Panel):
         col.prop(st, "camera")
         col.prop(st, "live")
         col.prop(st, "scale")
-        col.prop(st, "smooth")
         col.prop(st, "joy_speed")
+
+        box = layout.box()
+        box.label(text="Стабілізація", icon="MOD_SMOOTH")
+        box.prop(st, "preset", text="")
+        if st.preset == "custom":
+            box.prop(st, "smooth")
+        box.prop(st, "roll_lock")
+
+        box = layout.box()
+        box.label(text="Обліт", icon="ORIENTATION_GIMBAL")
+        box.row(align=True).prop(st, "orbit", expand=True)
+        if st.orbit != "off":
+            box.prop(st, "orbit_target")
+            if st.orbit == "target":
+                box.prop(st, "orbit_hold", slider=True)
+            if s is not None and s._target_name:
+                box.label(text="Ціль: %s" % s._target_name)
+
+        col = layout.column()
         col.prop(st, "stream")
+        if st.stream:
+            col.prop(st, "stream_quality", text="Якість")
         row = col.row(align=True)
         row.prop(st, "roll_deg", expand=True)
         col.prop(st, "mirror_x")

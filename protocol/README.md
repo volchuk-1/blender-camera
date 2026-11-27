@@ -46,13 +46,13 @@ Phone → Blender:
 | `record_stop`  | — | |
 | `play` / `pause` | — | timeline playback |
 | `frame`        | `n` | jump to frame `n` |
-| `settings`     | `scale`, `smooth`, `joy_speed`, `roll_deg` (0/90/180/270), `mirror_x` (bool), `stream` (bool) | any subset |
+| `settings`     | `scale`, `smooth`, `joy_speed`, `roll_deg` (0/90/180/270), `mirror_x` (bool), `stream` (bool), `preset` (`handheld`/`steadicam`/`crane`/`tripod`/`custom`), `roll_lock` (bool), `orbit` (`off`/`target`/`turntable`), `orbit_hold` (0–1), `stream_quality` (`normal`/`high`) | any subset |
 
 Blender → phone:
 
 | type    | fields |
 |---------|--------|
-| `state` | `connected`, `recording`, `frame`, `frame_start`, `frame_end`, `fps`, `focal`, `camera`, `take` (next or current take name) + optional `last_take`, `scale`, `smooth`, `joy_speed`, `roll_deg`, `mirror_x`, `stream`, `live` (false = a take is shown, the phone does not drive the camera) |
+| `state` | `connected`, `recording`, `frame`, `frame_start`, `frame_end`, `fps`, `focal`, `camera`, `take` (next or current take name) + optional `last_take`, `scale`, `smooth`, `joy_speed`, `roll_deg`, `mirror_x`, `stream`, `live` (false = a take is shown, the phone does not drive the camera), `preset`, `roll_lock`, `orbit`, `orbit_hold`, `stream_quality`, `target` (orbit target name or empty) |
 | `toast` | `text` (short message shown on the phone) |
 | `frame` | `len`, optional `ts` — followed by exactly `len` bytes of JPEG (live camera view) |
 

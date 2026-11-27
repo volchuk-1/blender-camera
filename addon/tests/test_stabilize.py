@@ -81,6 +81,9 @@ class StabilizeTest(unittest.TestCase):
 
     def test_preset_for(self):
         self.assertEqual(preset_for("custom", 0.0).bake_sigma, 0.0)
+        raw = LiveSmoother(preset_for("custom", 0.0))
+        raw.apply(cam((0, 0, 1.6)), 0.0)
+        self.assertAlmostEqual(raw.apply(cam((1, 0, 1.6)), 1 / 60).translation.x, 1.0, places=5)
         self.assertAlmostEqual(preset_for("custom", 0.5).bake_sigma, 2.0)
         self.assertEqual(preset_for("nope", 0.3).name, "steadicam")
         self.assertTrue(preset_for("crane", 0).roll_lock)

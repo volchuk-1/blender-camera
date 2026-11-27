@@ -157,11 +157,19 @@ def smooth(frames: List[FrameSample], strength: float) -> List[FrameSample]:
     return out
 
 
-def process(samples, t0, fps, frame_start, strength):
-    """Full pipeline: resample -> gaps (hold) -> smooth -> continuous. Returns (frames, gaps)."""
+def process(samples, t0, fps, frame_start, strength, roll_lock=False):
+    """Full pipeline: resample -> gaps (hold) -> smooth -> [level horizon] -> continuous. Returns (frames, gaps)."""
     frames = resample(samples, t0, fps, frame_start)
     gaps = mark_gaps(frames)
-    frames = make_continuous(smooth(frames, strength))
+    frames = smooth(frames, strength)
+    if roll_lock:
+        from .stabilize import remove_roll
+
+        for f in frames:
+            m = f.quat.to_matrix().to_4x4()
+            m.translation = f.loc
+            f.quat = remove_roll(m).to_quaternion()
+    frames = make_continuous(frames)
     return frames, gaps
 
 
@@ -239,7 +247,7 @@ def _decode_samples(rows) -> List[Sample]:
 
 def bake(cam_obj, frames: List[FrameSample], take_name: str, raw: Optional[List[Sample]],
          t0: float = 0.0, fps: float = 24.0, frame_start: int = 1, strength: float = 0.0,
-         gaps: Optional[List[Tuple[int, int]]] = None):
+         gaps: Optional[List[Tuple[int, int]]] = None, preset: str = "", roll_lock: bool = False):
     """Write frames as keyframes into Action `take_name` (+ `take_name_lens` on the camera data).
 
     `raw` = the raw samples to store for re-baking; None keeps the samples already stored.
@@ -271,6 +279,8 @@ def bake(cam_obj, frames: List[FrameSample], take_name: str, raw: Optional[List[
         "frame_start": frame_start,
         "frame_end": frames[-1].frame if frames else frame_start,
         "smooth": strength,
+        "preset": preset,
+        "roll_lock": bool(roll_lock),
         "gaps": [list(g) for g in gaps],
         "camera": cam_obj.name,
     }
@@ -284,9 +294,18 @@ def bake(cam_obj, frames: List[FrameSample], take_name: str, raw: Optional[List[
         meta["samples"] = []
     if txt is None:
         txt = data.texts.new(text_name(take_name))
-    txt.clear()
-    txt.write(json.dumps(meta, separators=(",", ":")))
+    txt.from_string(_dump_meta(meta))
     return act
+
+
+def _dump_meta(meta: dict) -> str:
+    """JSON with one sample per line: a single huge line makes Blender's text block very slow."""
+    head = dict(meta)
+    samples = head.pop("samples", [])
+    body = json.dumps(head, separators=(",", ":"))[:-1]
+    nl = chr(10)
+    rows = ("," + nl).join(json.dumps(r, separators=(",", ":")) for r in samples)
+    return body + ',"samples":[' + nl + rows + nl + "]}" + nl
 
 
 def load_raw(data, take_name):
@@ -311,16 +330,17 @@ def take_info(data, take_name) -> Optional[dict]:
     return meta
 
 
-def rebake(cam_obj, take_name: str, strength: float):
+def rebake(cam_obj, take_name: str, strength: float, roll_lock: bool = False, preset: str = ""):
     import bpy
 
     meta = load_raw(bpy.data, take_name)
     if meta is None or not meta.get("samples"):
         raise ValueError("no raw samples for %s" % take_name)
     raw = _decode_samples(meta["samples"])
-    frames, gaps = process(raw, meta["t0"], meta["fps"], meta["frame_start"], strength)
+    frames, gaps = process(raw, meta["t0"], meta["fps"], meta["frame_start"], strength, roll_lock)
     return bake(cam_obj, frames, take_name, None, t0=meta["t0"], fps=meta["fps"],
-                frame_start=meta["frame_start"], strength=strength, gaps=gaps)
+                frame_start=meta["frame_start"], strength=strength, gaps=gaps, preset=preset,
+                roll_lock=roll_lock)
 
 
 def activate(cam_obj, take_name: str):
